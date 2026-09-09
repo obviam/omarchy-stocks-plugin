@@ -377,7 +377,8 @@ Panel {
             visible: root.tickers.length === 0 && !root.adding
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
-            text: "No tickers yet — press + to add one"
+            wrapMode: Text.WordWrap
+            text: "Build your watchlist\n\nAdd a Yahoo Finance symbol below, such as AAPL, ^GSPC, GBPUSD=X, or BTC-USD. Quotes refresh in the background and alerts keep working while Omarchy Shell is running."
             color: Qt.darker(root.contentForeground, 1.5)
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.bodySmall
@@ -827,6 +828,16 @@ Panel {
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.caption
             horizontalAlignment: Text.AlignHCenter
+          }
+
+          Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            horizontalAlignment: Text.AlignHCenter
+            text: "Quotes supplied by Yahoo Finance · internet access and curl required"
+            color: Qt.darker(root.contentForeground, 1.9)
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.caption
           }
         }
       }
