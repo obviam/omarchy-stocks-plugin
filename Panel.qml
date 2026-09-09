@@ -26,6 +26,8 @@ Panel {
   property bool validating: false
   property string addError: ""
   property string addPending: ""
+  property var lastRemovedTicker: null
+  property int lastRemovedIndex: -1
 
   StocksStore { id: store }
 
@@ -134,11 +136,40 @@ Panel {
 
   function removeSymbol(sym) {
     var s = String(sym).toUpperCase()
+    var list = store.state.tickers || []
+    for (var i = 0; i < list.length; i++) {
+      if (String(list[i].symbol).toUpperCase() === s) {
+        root.lastRemovedTicker = JSON.parse(JSON.stringify(list[i]))
+        root.lastRemovedIndex = i
+        undoTimer.restart()
+        break
+      }
+    }
     store.mutate(function (draft) {
       draft.tickers = (draft.tickers || []).filter(function (t) {
         return String(t.symbol).toUpperCase() !== s
       })
     })
+  }
+
+  function undoRemove() {
+    if (!root.lastRemovedTicker) return
+    var restored = root.lastRemovedTicker
+    var at = root.lastRemovedIndex
+    store.mutate(function (draft) {
+      var list = draft.tickers || []
+      list.splice(Math.max(0, Math.min(at, list.length)), 0, restored)
+      draft.tickers = list
+    })
+    root.selectedSymbol = restored.symbol
+    root.lastRemovedTicker = null
+    undoTimer.stop()
+  }
+
+  Timer {
+    id: undoTimer
+    interval: 6000
+    onTriggered: root.lastRemovedTicker = null
   }
 
   function startAdd() {
@@ -535,7 +566,7 @@ Panel {
 
                   PanelActionButton {
                     anchors.verticalCenter: parent.verticalCenter
-                    opacity: (rowMouse.containsMouse || removeHover.hovered) ? 1 : 0
+                    opacity: (rowMouse.containsMouse || removeHover.hovered) ? 1 : 0.45
                     iconText: "×"
                     tooltipText: "Remove " + rowRect.modelData.symbol
                     foreground: root.contentForeground
@@ -546,6 +577,28 @@ Panel {
                   }
                 }
               }
+            }
+          }
+
+          Row {
+            visible: root.lastRemovedTicker !== null
+            width: parent.width
+            spacing: Style.space(8)
+            Text {
+              width: parent.width - undoButton.width - parent.spacing
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.lastRemovedTicker ? root.lastRemovedTicker.symbol + " removed" : ""
+              color: root.contentForeground
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+            Button {
+              id: undoButton
+              text: "Undo"
+              bordered: true
+              fontFamily: root.contentFontFamily
+              foreground: root.contentForeground
+              onClicked: root.undoRemove()
             }
           }
 
