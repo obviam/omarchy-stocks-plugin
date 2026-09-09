@@ -254,6 +254,14 @@ function formatSignedChange(value) {
   return (value >= 0 ? "+" : "−") + formatPrice(Math.abs(value))
 }
 
+function formatUpdateTime(ms) {
+  var n = Number(ms)
+  if (!isFinite(n) || n <= 0) return "Not updated yet"
+  var d = new Date(n)
+  function pad(v) { return v < 10 ? "0" + v : String(v) }
+  return "Updated " + pad(d.getHours()) + ":" + pad(d.getMinutes())
+}
+
 function direction(value) {
   if (value === null || value === undefined || !isFinite(value) || value === 0) return 0
   return value > 0 ? 1 : -1
@@ -446,6 +454,7 @@ if (typeof module !== "undefined") {
     formatPrice: formatPrice,
     formatSignedPct: formatSignedPct,
     formatSignedChange: formatSignedChange,
+    formatUpdateTime: formatUpdateTime,
     direction: direction,
     arrow: arrow,
     rotationLabel: rotationLabel,

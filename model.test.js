@@ -110,6 +110,8 @@ ok("alertStateEqual different", !m.alertStateEqual(r1.nextAlertState, r2.nextAle
 ok("formatPrice 2dp", m.formatPrice(315.3456) === "315.35")
 ok("formatPrice small 4dp", m.formatPrice(0.01234) === "0.0123")
 ok("formatSignedPct", m.formatSignedPct(-1.234) === "−1.23%")
+ok("formatUpdateTime empty", m.formatUpdateTime(0) === "Not updated yet")
+ok("formatUpdateTime has clock", m.formatUpdateTime(now).indexOf("Updated ") === 0)
 ok("rotationLabel", m.rotationLabel({ symbol: "AAPL" }, m.buildQuote(100, 98, [])).indexOf("AAPL") === 0)
 var pts = m.sparklinePoints([1, 2, 3, 4], 100, 10, 0)
 ok("sparklinePoints count", pts.length === 4)

@@ -19,6 +19,8 @@ Item {
   property bool fetching: false
   property int retries: 0
   property string lastSymbols: ""
+  property double lastUpdatedMs: 0
+  property string fetchError: ""
 
   signal quotesUpdated()
 
@@ -40,6 +42,7 @@ Item {
 
   function startFetch() {
     root.fetching = true
+    root.fetchError = ""
     fetchProc.command = ["curl", "-fsS", "-A", "Mozilla/5.0", "--max-time", "10",
       "https://query1.finance.yahoo.com/v8/finance/spark?symbols="
         + encodeURIComponent(root.symbolsParam) + "&range=1d&interval=5m"]
@@ -48,7 +51,10 @@ Item {
 
   function scheduleRetry() {
     root.fetching = false
-    if (root.retries >= 3) return
+    if (root.retries >= 3) {
+      root.fetchError = "Quotes unavailable — showing last known prices"
+      return
+    }
     root.retries++
     retryTimer.restart()
   }
@@ -69,6 +75,8 @@ Item {
         root.quotes = merged
         root.retries = 0
         root.fetching = false
+        root.fetchError = ""
+        root.lastUpdatedMs = Date.now()
         root.quotesUpdated()
         root.evaluateAlerts()
       }

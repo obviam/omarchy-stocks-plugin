@@ -293,10 +293,35 @@ Panel {
         boundsBehavior: Flickable.StopAtBounds
         interactive: contentHeight > height
 
-        Column {
-          id: contentColumn
-          width: scroll.width
-          spacing: Style.space(14)
+          Column {
+            id: contentColumn
+            width: scroll.width
+            spacing: Style.space(14)
+
+            Row {
+              visible: root.tickers.length > 0
+              width: parent.width
+              spacing: Style.space(8)
+
+              Text {
+                width: parent.width - refreshStatus.width - parent.spacing
+                text: root.service && root.service.fetchError ? root.service.fetchError : ""
+                elide: Text.ElideRight
+                color: root.bar ? root.bar.urgent : Color.urgent
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              Text {
+                id: refreshStatus
+                text: root.service && root.service.fetching
+                  ? "Refreshing…"
+                  : Model.formatUpdateTime(root.service ? root.service.lastUpdatedMs : 0)
+                color: Qt.darker(root.contentForeground, 1.6)
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.caption
+              }
+            }
 
           // ---- empty state -------------------------------------------------
           Text {
