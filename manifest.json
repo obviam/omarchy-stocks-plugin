@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "tamas.stocks",
+  "name": "Stocks",
+  "version": "1.0.0",
+  "author": "tamas",
+  "description": "Watchlist, live quotes, sparklines and price alerts in the bar",
+  "kinds": [
+    "bar-widget",
+    "service"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml",
+    "service": "Service.qml"
+  },
+  "barWidget": {
+    "displayName": "Stocks",
+    "description": "Rotating ticker pill with a watchlist popup and alerts",
+    "category": "Info",
+    "allowMultiple": false
+  }
+}

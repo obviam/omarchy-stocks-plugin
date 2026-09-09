@@ -1,0 +1,8 @@
+# Editor / OS cruft
+*.swp
+*~
+.DS_Store
+
+# Quickshell compiled QML cache, if it ever lands here
+*.qmlc
+*.jsc
