@@ -239,6 +239,13 @@ Panel {
     })
   }
 
+  function updateSetting(key, value) {
+    store.mutate(function (draft) {
+      if (!draft.settings) draft.settings = Model.defaultSettings()
+      draft.settings[key] = value
+    })
+  }
+
   // Keep the selection valid as the list changes underneath us.
   Connections {
     target: store
@@ -649,6 +656,49 @@ Panel {
               fontFamily: root.contentFontFamily
               foreground: root.contentForeground
               onClicked: root.addAlert(root.selectedTicker.symbol)
+            }
+          }
+
+          PanelSeparator {}
+
+          Column {
+            width: parent.width
+            spacing: Style.space(8)
+
+            PanelSectionHeader {
+              text: "SETTINGS"
+              foreground: root.contentForeground
+              fontFamily: root.contentFontFamily
+            }
+
+            Row {
+              width: parent.width
+              spacing: Style.space(8)
+              Text { width: parent.width - refreshField.width - parent.spacing; text: "Refresh quotes (seconds)"; color: root.contentForeground; font.family: root.contentFontFamily; font.pixelSize: Style.font.body }
+              TextField {
+                id: refreshField
+                width: Style.space(80)
+                text: String(store.state.settings.refreshSeconds)
+                foreground: root.contentForeground
+                horizontalAlignment: TextInput.AlignRight
+                validator: IntValidator { bottom: 15; top: 3600 }
+                onEditingFinished: root.updateSetting("refreshSeconds", parseInt(text, 10))
+              }
+            }
+
+            Row {
+              width: parent.width
+              spacing: Style.space(8)
+              Text { width: parent.width - rotateField.width - parent.spacing; text: "Rotate bar ticker (seconds)"; color: root.contentForeground; font.family: root.contentFontFamily; font.pixelSize: Style.font.body }
+              TextField {
+                id: rotateField
+                width: Style.space(80)
+                text: String(store.state.settings.rotateSeconds)
+                foreground: root.contentForeground
+                horizontalAlignment: TextInput.AlignRight
+                validator: IntValidator { bottom: 2; top: 60 }
+                onEditingFinished: root.updateSetting("rotateSeconds", parseInt(text, 10))
+              }
             }
           }
 
