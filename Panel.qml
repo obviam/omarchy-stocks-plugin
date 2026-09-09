@@ -180,8 +180,13 @@ Panel {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        var meta = Model.parseChartMeta(String(text || ""))
+        var raw = String(text || "").trim()
         root.validating = false
+        if (raw === "") {
+          root.addError = "Couldn’t reach the quote service — try again"
+          return
+        }
+        var meta = Model.parseChartMeta(raw)
         if (!meta.ok) {
           root.addError = "Unknown symbol “" + root.addPending + "”"
           return
