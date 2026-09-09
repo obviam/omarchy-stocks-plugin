@@ -66,7 +66,13 @@ function normalizeTicker(raw) {
       if (a) alerts.push(a)
     }
   }
-  return { symbol: symbol, name: String(raw.name || ""), alerts: alerts }
+  return {
+    symbol: symbol,
+    name: String(raw.name || ""),
+    currency: String(raw.currency || ""),
+    exchange: String(raw.exchange || ""),
+    alerts: alerts
+  }
 }
 
 function liveAlertIds(tickers) {
@@ -153,19 +159,23 @@ function cleanNumbers(arr) {
   return out
 }
 
-function buildQuote(price, prev, spark) {
+function buildQuote(price, prev, spark, metadata) {
   var change = null
   var changePct = null
   if (price !== null && isFinite(price) && isFinite(prev) && prev !== 0) {
     change = price - prev
     changePct = (change / prev) * 100
   }
+  var meta = metadata || {}
   return {
     price: (price !== null && isFinite(price)) ? price : null,
     prevClose: isFinite(prev) ? prev : null,
     change: change,
     changePct: changePct,
-    spark: spark || []
+    spark: spark || [],
+    currency: String(meta.currency || ""),
+    exchange: String(meta.exchange || meta.exchangeName || ""),
+    marketState: String(meta.marketState || "")
   }
 }
 
@@ -174,7 +184,7 @@ function quoteFromFlatSpark(entry) {
   var prev = Number(entry.chartPreviousClose)
   if (!isFinite(prev)) prev = Number(entry.previousClose)
   var price = closes.length ? closes[closes.length - 1] : (isFinite(prev) ? prev : null)
-  return buildQuote(price, prev, closes)
+  return buildQuote(price, prev, closes, entry)
 }
 
 function quoteFromNestedSpark(response) {
@@ -188,7 +198,7 @@ function quoteFromNestedSpark(response) {
   var price = closes.length
     ? closes[closes.length - 1]
     : (meta && isFinite(Number(meta.regularMarketPrice)) ? Number(meta.regularMarketPrice) : (isFinite(prev) ? prev : null))
-  return buildQuote(price, prev, closes)
+  return buildQuote(price, prev, closes, meta)
 }
 
 // Accepts both spark response shapes: the flat `{ "AAPL": { close, ... } }`
@@ -227,7 +237,12 @@ function parseChartMeta(text) {
     var result = chart.result && chart.result[0]
     var meta = result && result.meta
     if (!meta) return { ok: false, name: "" }
-    return { ok: true, name: String(meta.longName || meta.shortName || "") }
+    return {
+      ok: true,
+      name: String(meta.longName || meta.shortName || ""),
+      currency: String(meta.currency || ""),
+      exchange: String(meta.exchangeName || meta.fullExchangeName || "")
+    }
   } catch (e) {
     return { ok: false, name: "" }
   }

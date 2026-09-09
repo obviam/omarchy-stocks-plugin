@@ -224,7 +224,13 @@ Panel {
         }
         var sym = root.addPending
         store.mutate(function (draft) {
-          draft.tickers = (draft.tickers || []).concat([{ symbol: sym, name: meta.name, alerts: [] }])
+          draft.tickers = (draft.tickers || []).concat([{
+            symbol: sym,
+            name: meta.name,
+            currency: meta.currency,
+            exchange: meta.exchange,
+            alerts: []
+          }])
         })
         root.selectedSymbol = sym
         root.addPending = ""
@@ -429,7 +435,7 @@ Panel {
                   font.bold: true
                 }
                 Text {
-                  text: root.selectedQuote ? Model.formatSignedPct(root.selectedQuote.changePct) + "  ·  24h" : ""
+                  text: root.selectedQuote ? Model.formatSignedPct(root.selectedQuote.changePct) + "  ·  since previous close" : ""
                   color: root.dirColor(root.selectedQuote ? root.selectedQuote.changePct : null)
                   font.family: root.contentFontFamily
                   font.pixelSize: Style.font.bodySmall
@@ -445,6 +451,20 @@ Panel {
               lineThickness: 1.8
               lineColor: root.dirColor(root.selectedQuote ? root.selectedQuote.changePct : null)
               fillColor: lineColor
+            }
+
+            Text {
+              visible: root.selectedTicker !== null
+              text: {
+                var q = root.selectedQuote
+                var currency = q && q.currency ? q.currency : (root.selectedTicker ? root.selectedTicker.currency : "")
+                var exchange = q && q.exchange ? q.exchange : (root.selectedTicker ? root.selectedTicker.exchange : "")
+                var market = q && q.marketState ? q.marketState.replace(/_/g, " ").toLowerCase() : ""
+                return [currency, exchange, market].filter(function (v) { return v !== "" }).join(" · ")
+              }
+              color: Qt.darker(root.contentForeground, 1.6)
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.caption
             }
           }
 

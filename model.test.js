@@ -15,6 +15,7 @@ ok("parseSpark price = last non-null close", q.price === 104)
 ok("parseSpark prevClose", q.prevClose === 100)
 ok("parseSpark changePct", Math.abs(q.changePct - 4) < 1e-9)
 ok("parseSpark spark drops nulls", q.spark.length === 3)
+ok("parseSpark keeps currency", m.parseSpark(JSON.stringify({ AAPL: { close: [1], previousClose: 1, currency: "USD" } })).AAPL.currency === "USD")
 
 // ---- parseSpark (nested shape) ----
 var nested = JSON.stringify({
