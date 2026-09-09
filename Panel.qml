@@ -29,8 +29,6 @@ Panel {
   property var lastRemovedTicker: null
   property int lastRemovedIndex: -1
 
-  StocksStore { id: store }
-
   // The host BarWidget injects `service`, but fall back to resolving it
   // ourselves from bar.shell in case that injection is missed or late.
   function resolveOwnService() {
@@ -49,7 +47,8 @@ Panel {
     onTriggered: { root.resolveOwnService(); if (root.service) running = false }
   }
 
-  readonly property var tickers: store.state.tickers
+  readonly property var state: (service && service.state) ? service.state : Model.defaultState()
+  readonly property var tickers: root.state.tickers
   readonly property var quotes: (service && service.quotes) ? service.quotes : ({})
 
   readonly property var selectedTicker: {
@@ -84,14 +83,14 @@ Panel {
     openedFromHotkey = false
     setCenterHoverRevealSuppressed(false)
     root.controller.show()
-    store.reload()
+    if (service && service.reloadState) service.reloadState()
     if (service && service.refresh) service.refresh()
   }
 
   function openFromHotkey() {
     openedFromHotkey = true
     root.controller.show()
-    store.reload()
+    if (service && service.reloadState) service.reloadState()
     if (service && service.refresh) service.refresh()
     Qt.callLater(function () {
       if (root.opened) setCenterHoverRevealSuppressed(true)
@@ -141,7 +140,7 @@ Panel {
 
   function removeSymbol(sym) {
     var s = String(sym).toUpperCase()
-    var list = store.state.tickers || []
+    var list = root.state.tickers || []
     for (var i = 0; i < list.length; i++) {
       if (String(list[i].symbol).toUpperCase() === s) {
         root.lastRemovedTicker = JSON.parse(JSON.stringify(list[i]))
@@ -150,7 +149,7 @@ Panel {
         break
       }
     }
-    store.mutate(function (draft) {
+    root.mutateState(function (draft) {
       draft.tickers = (draft.tickers || []).filter(function (t) {
         return String(t.symbol).toUpperCase() !== s
       })
@@ -161,7 +160,7 @@ Panel {
     var from = root.selectedIndex
     var to = from + delta
     if (from < 0 || to < 0 || to >= root.tickers.length) return
-    store.mutate(function (draft) {
+    root.mutateState(function (draft) {
       var moved = draft.tickers.splice(from, 1)[0]
       draft.tickers.splice(to, 0, moved)
     })
@@ -171,7 +170,7 @@ Panel {
     if (!root.lastRemovedTicker) return
     var restored = root.lastRemovedTicker
     var at = root.lastRemovedIndex
-    store.mutate(function (draft) {
+    root.mutateState(function (draft) {
       var list = draft.tickers || []
       list.splice(Math.max(0, Math.min(at, list.length)), 0, restored)
       draft.tickers = list
@@ -207,7 +206,7 @@ Panel {
   function commitAdd() {
     var raw = String(addField.text || "").trim().toUpperCase()
     if (raw === "") { cancelAdd(); return }
-    if (Model.findTicker(store.state, raw)) {
+    if (Model.findTicker(root.state, raw)) {
       root.selectedSymbol = raw
       cancelAdd()
       return
@@ -238,7 +237,7 @@ Panel {
           return
         }
         var sym = root.addPending
-        store.mutate(function (draft) {
+        root.mutateState(function (draft) {
           draft.tickers = (draft.tickers || []).concat([{
             symbol: sym,
             name: meta.name,
@@ -262,7 +261,7 @@ Panel {
     var s = String(sym).toUpperCase()
     var q = root.quotes[s]
     var seed = Model.defaultAlertValue("above", q)
-    store.mutate(function (draft) {
+    root.mutateState(function (draft) {
       var t = root.tickerInDraft(draft, s)
       if (!t) return
       if (!Array.isArray(t.alerts)) t.alerts = []
@@ -272,7 +271,7 @@ Panel {
 
   function updateAlert(sym, alertId, patch) {
     var s = String(sym).toUpperCase()
-    store.mutate(function (draft) {
+    root.mutateState(function (draft) {
       var t = root.tickerInDraft(draft, s)
       if (!t || !Array.isArray(t.alerts)) return
       for (var i = 0; i < t.alerts.length; i++) {
@@ -284,7 +283,7 @@ Panel {
 
   function removeAlert(sym, alertId) {
     var s = String(sym).toUpperCase()
-    store.mutate(function (draft) {
+    root.mutateState(function (draft) {
       var t = root.tickerInDraft(draft, s)
       if (!t || !Array.isArray(t.alerts)) return
       t.alerts = t.alerts.filter(function (a) { return a.id !== alertId })
@@ -292,16 +291,20 @@ Panel {
   }
 
   function updateSetting(key, value) {
-    store.mutate(function (draft) {
+    root.mutateState(function (draft) {
       if (!draft.settings) draft.settings = Model.defaultSettings()
       draft.settings[key] = value
     })
   }
 
   // Keep the selection valid as the list changes underneath us.
+  function mutateState(fn) {
+    if (root.service && root.service.mutateState) root.service.mutateState(fn)
+  }
+
   Connections {
-    target: store
-    function onChanged() {
+    target: root.service
+    function onStateChanged() {
       var list = root.tickers
       if (!list || list.length === 0) { root.selectedSymbol = ""; return }
       for (var i = 0; i < list.length; i++)
@@ -798,7 +801,7 @@ Panel {
               TextField {
                 id: refreshField
                 width: Style.space(80)
-                text: String(store.state.settings.refreshSeconds)
+                text: String(root.state.settings.refreshSeconds)
                 foreground: root.contentForeground
                 horizontalAlignment: TextInput.AlignRight
                 validator: IntValidator { bottom: 15; top: 3600 }
@@ -813,7 +816,7 @@ Panel {
               TextField {
                 id: rotateField
                 width: Style.space(80)
-                text: String(store.state.settings.rotateSeconds)
+                text: String(root.state.settings.rotateSeconds)
                 foreground: root.contentForeground
                 horizontalAlignment: TextInput.AlignRight
                 validator: IntValidator { bottom: 2; top: 60 }

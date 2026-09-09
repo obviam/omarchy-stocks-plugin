@@ -26,9 +26,13 @@ Item {
 
   readonly property var settings: store.state.settings
   readonly property var tickers: store.state.tickers
+  readonly property var state: store.state
   readonly property string symbolsParam: Model.symbolList(store.state).join(",")
 
   StocksStore { id: store }
+
+  function reloadState() { store.reload() }
+  function mutateState(fn) { store.mutate(fn) }
 
   function refresh() {
     if (root.symbolsParam === "") {
