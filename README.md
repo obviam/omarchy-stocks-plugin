@@ -35,20 +35,20 @@ failures are non-fatal (last-good data stays on screen, with retry/backoff).
 
 ```bash
 omarchy plugin add <repository-url>
-omarchy plugin enable tamas.stocks
+omarchy plugin enable impaler.stocks
 ```
 
 The plugin lands **disabled** so you can read the code first (plugins run
 unsandboxed inside `omarchy-shell`). `enable` drops the pill on the bar; move
-it with `omarchy bar move tamas.stocks --section right`.
+it with `omarchy bar move impaler.stocks --section right`.
 
-Update later with `omarchy plugin update tamas.stocks` (fast-forward pull, shows
+Update later with `omarchy plugin update impaler.stocks` (fast-forward pull, shows
 a diff first).
 
 ### Hotkey (optional)
 
 ```
-bind = SUPER, S, exec, omarchy-shell shell toggle tamas.stocks
+bind = SUPER, S, exec, omarchy-shell shell toggle impaler.stocks
 ```
 
 ## Controls

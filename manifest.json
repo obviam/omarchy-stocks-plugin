@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "id": "tamas.stocks",
+  "id": "impaler.stocks",
   "name": "Stocks",
   "version": "1.0.0",
-  "author": "tamas",
+  "author": "impaler",
   "description": "Watchlist, live quotes, sparklines and price alerts in the bar",
   "kinds": [
     "bar-widget",

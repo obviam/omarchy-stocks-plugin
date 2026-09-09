@@ -11,8 +11,8 @@ import "Model.js" as Model
 // Flickable), and BarWidget.qml owns the bar label and anchors this panel.
 Panel {
   id: root
-  moduleName: "tamas.stocks"
-  ipcTarget: "tamas.stocks"
+  moduleName: "impaler.stocks"
+  ipcTarget: "impaler.stocks"
   manageIpc: false
 
   property var anchorItem: null

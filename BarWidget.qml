@@ -10,7 +10,7 @@ import "Model.js" as Model
 // click forces a refresh, right click fires a one-line watchlist toast.
 BarWidget {
   id: root
-  moduleName: "tamas.stocks"
+  moduleName: "impaler.stocks"
 
   property var service: null
   property int rotationIndex: 0
