@@ -204,7 +204,7 @@ Panel {
   function addAlert(sym) {
     var s = String(sym).toUpperCase()
     var q = root.quotes[s]
-    var seed = (q && q.price !== null && isFinite(q.price)) ? Math.round(q.price * 100) / 100 : 0
+    var seed = Model.defaultAlertValue("above", q)
     store.mutate(function (draft) {
       var t = root.tickerInDraft(draft, s)
       if (!t) return
@@ -568,7 +568,10 @@ Panel {
                   ]
                   value: alertRow.modelData.type
                   onChanged: function (v) {
-                    root.updateAlert(alertRow.sym, alertRow.modelData.id, { type: v })
+                    root.updateAlert(alertRow.sym, alertRow.modelData.id, {
+                      type: v,
+                      value: Model.defaultAlertValue(v, root.quotes[alertRow.sym])
+                    })
                   }
                 }
 

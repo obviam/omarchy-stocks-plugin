@@ -55,6 +55,12 @@ ok("refreshSeconds clamped up to 15", st.settings.refreshSeconds === 15)
 ok("rotateSeconds clamped down to 60", st.settings.rotateSeconds === 60)
 ok("orphan alertState pruned", Object.keys(st.alertState).length === 0)
 
+// ---- alert editor defaults ----
+ok("above alert starts above market", m.defaultAlertValue("above", { price: 100 }) === 101)
+ok("below alert starts below market", m.defaultAlertValue("below", { price: 100 }) === 99)
+ok("percentage alert defaults to 5%", m.defaultAlertValue("pctMove", { price: 100 }) === 5)
+ok("missing quote has editable zero fallback", m.defaultAlertValue("above", null) === 0)
+
 // ---- evaluateAlerts: above with hysteresis ----
 var tickers = [ { symbol: "AAPL", name: "Apple", alerts: [
   { id: "x1", type: "above", value: 320, enabled: true }

@@ -128,6 +128,18 @@ function findTicker(state, symbol) {
   return null
 }
 
+// Pick a useful, non-triggering starting value when an alert is created or
+// changes type. Price alerts start 1% away from the latest quote; percentage
+// alerts use a conventional 5% daily move.
+function defaultAlertValue(type, quote) {
+  if (type === "pctMove") return 5
+  var price = quote && Number(quote.price)
+  if (!isFinite(price) || price <= 0) return 0
+  var value = price * (type === "below" ? 0.99 : 1.01)
+  var digits = value >= 1 ? 2 : 4
+  return Number(value.toFixed(digits))
+}
+
 // ------------------------------------------------- Yahoo Finance parsing ----
 
 function cleanNumbers(arr) {
@@ -427,6 +439,7 @@ if (typeof module !== "undefined") {
     parseState: parseState,
     symbolList: symbolList,
     findTicker: findTicker,
+    defaultAlertValue: defaultAlertValue,
     parseSpark: parseSpark,
     parseChartMeta: parseChartMeta,
     buildQuote: buildQuote,
