@@ -60,6 +60,11 @@ Panel {
     return list[0]
   }
   readonly property var selectedQuote: root.selectedTicker ? root.quotes[root.selectedTicker.symbol] : null
+  readonly property int selectedIndex: {
+    for (var i = 0; i < root.tickers.length; i++)
+      if (root.tickers[i].symbol === root.selectedSymbol) return i
+    return root.tickers.length > 0 ? 0 : -1
+  }
 
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
@@ -149,6 +154,16 @@ Panel {
       draft.tickers = (draft.tickers || []).filter(function (t) {
         return String(t.symbol).toUpperCase() !== s
       })
+    })
+  }
+
+  function moveSelected(delta) {
+    var from = root.selectedIndex
+    var to = from + delta
+    if (from < 0 || to < 0 || to >= root.tickers.length) return
+    store.mutate(function (draft) {
+      var moved = draft.tickers.splice(from, 1)[0]
+      draft.tickers.splice(to, 0, moved)
     })
   }
 
@@ -635,6 +650,37 @@ Panel {
               text: "ALERTS · " + (root.selectedTicker ? root.selectedTicker.symbol : "")
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
+            }
+
+            Row {
+              width: parent.width
+              spacing: Style.space(8)
+              Text {
+                width: parent.width - earlierButton.width - laterButton.width - parent.spacing * 2
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Watchlist position"
+                color: Qt.darker(root.contentForeground, 1.5)
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.bodySmall
+              }
+              Button {
+                id: earlierButton
+                text: "↑ Earlier"
+                bordered: true
+                enabled: root.selectedIndex > 0
+                fontFamily: root.contentFontFamily
+                foreground: root.contentForeground
+                onClicked: root.moveSelected(-1)
+              }
+              Button {
+                id: laterButton
+                text: "↓ Later"
+                bordered: true
+                enabled: root.selectedIndex >= 0 && root.selectedIndex < root.tickers.length - 1
+                fontFamily: root.contentFontFamily
+                foreground: root.contentForeground
+                onClicked: root.moveSelected(1)
+              }
             }
 
             Text {
