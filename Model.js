@@ -248,6 +248,32 @@ function parseChartMeta(text) {
   }
 }
 
+// Turn Yahoo's search response into a compact, deduplicated list of tradable
+// instruments. News and other non-quote results are intentionally ignored.
+function parseSearch(text, limit) {
+  var out = []
+  var seen = {}
+  var max = Number(limit)
+  if (!isFinite(max) || max < 1) max = 8
+  try {
+    var data = JSON.parse(String(text || ""))
+    var quotes = data && Array.isArray(data.quotes) ? data.quotes : []
+    for (var i = 0; i < quotes.length && out.length < max; i++) {
+      var row = quotes[i] || {}
+      var symbol = String(row.symbol || "").trim().toUpperCase()
+      if (!symbol || seen[symbol]) continue
+      seen[symbol] = true
+      out.push({
+        symbol: symbol,
+        name: String(row.longname || row.shortname || row.name || ""),
+        exchange: String(row.exchDisp || row.exchange || ""),
+        type: String(row.typeDisp || row.quoteType || "")
+      })
+    }
+  } catch (e) {}
+  return out
+}
+
 // ------------------------------------------------------------ formatting ----
 
 function formatPrice(value) {
@@ -465,6 +491,7 @@ if (typeof module !== "undefined") {
     defaultAlertValue: defaultAlertValue,
     parseSpark: parseSpark,
     parseChartMeta: parseChartMeta,
+    parseSearch: parseSearch,
     buildQuote: buildQuote,
     formatPrice: formatPrice,
     formatSignedPct: formatSignedPct,

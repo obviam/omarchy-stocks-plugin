@@ -11,8 +11,9 @@ per-ticker price / percent-move alerts delivered as desktop notifications.
 - **Watchlist popup** — hero quote with a filled intraday sparkline, plus a
   row per ticker (price, mini sparkline, coloured daily-change badge). Click a row to
   make it the hero.
-- **Add / remove tickers** from the popup. Symbols are validated against Yahoo
-  Finance and their company name is fetched automatically. Works for equities,
+- **Search companies or symbols** as you type, then add a result from the dynamic
+  suggestion list. Exact symbols are still validated against Yahoo Finance.
+  Works for equities,
   ETFs, indices (`^GSPC`), FX and crypto (`BTC-USD`).
 - **Alerts**, per ticker: *rises above* / *falls below* a price, or *moves ±X%
   in a day*. Above/below alerts use a small hysteresis band so a price sitting
@@ -89,7 +90,7 @@ exchange-hosted alerts and cannot notify while the computer is off.
 
 - **“Couldn’t reach quote service”** — check internet access and that `curl` is
   installed, then press `r` to retry.
-- **“Unknown symbol”** — enter the Yahoo Finance symbol, including suffixes
+- **“Unknown symbol”** — choose a company from the suggestions or enter its Yahoo Finance symbol, including suffixes
   such as `.L` for many London listings or `-USD` for crypto pairs.
 - **“Quotes unavailable”** — retries were exhausted. Last-known prices remain
   visible and are explicitly marked as stale.

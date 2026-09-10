@@ -26,6 +26,9 @@ Panel {
   property bool validating: false
   property string addError: ""
   property string addPending: ""
+  property var searchResults: []
+  property string searchIssued: ""
+  property int searchIndex: -1
   property var lastRemovedTicker: null
   property int lastRemovedIndex: -1
 
@@ -200,10 +203,17 @@ Panel {
     root.validating = false
     root.addError = ""
     root.addPending = ""
+    root.searchResults = []
+    root.searchIndex = -1
+    searchTimer.stop()
     Qt.callLater(function () { if (keyCatcher) keyCatcher.forceActiveFocus() })
   }
 
   function commitAdd() {
+    if (root.searchIndex >= 0 && root.searchIndex < root.searchResults.length) {
+      addSearchResult(root.searchResults[root.searchIndex])
+      return
+    }
     var raw = String(addField.text || "").trim().toUpperCase()
     if (raw === "") { cancelAdd(); return }
     if (Model.findTicker(root.state, raw)) {
@@ -218,6 +228,74 @@ Panel {
       "https://query1.finance.yahoo.com/v8/finance/chart/"
         + encodeURIComponent(raw) + "?range=1d&interval=1d"]
     validateProc.running = true
+  }
+
+  function addSearchResult(result) {
+    if (!result || !result.symbol) return
+    var sym = String(result.symbol).toUpperCase()
+    if (Model.findTicker(root.state, sym)) {
+      root.selectedSymbol = sym
+      cancelAdd()
+      return
+    }
+    root.mutateState(function (draft) {
+      draft.tickers = (draft.tickers || []).concat([{
+        symbol: sym,
+        name: result.name || "",
+        currency: "",
+        exchange: result.exchange || "",
+        alerts: []
+      }])
+    })
+    root.selectedSymbol = sym
+    root.adding = false
+    root.searchResults = []
+    root.searchIndex = -1
+    if (root.service && root.service.refresh) root.service.refresh()
+    Qt.callLater(function () { if (keyCatcher) keyCatcher.forceActiveFocus() })
+  }
+
+  function queueSearch() {
+    root.searchIndex = -1
+    root.addError = ""
+    var query = String(addField.text || "").trim()
+    if (query.length < 2) {
+      searchTimer.stop()
+      root.searchResults = []
+      return
+    }
+    searchTimer.restart()
+  }
+
+  function startSearch() {
+    var query = String(addField.text || "").trim()
+    if (query.length < 2) return
+    if (searchProc.running) return
+    root.searchIssued = query
+    searchProc.command = ["curl", "-fsS", "-A", "Mozilla/5.0", "--max-time", "8",
+      "https://query2.finance.yahoo.com/v1/finance/search?q="
+        + encodeURIComponent(query) + "&quotesCount=8&newsCount=0"]
+    searchProc.running = true
+  }
+
+  Timer {
+    id: searchTimer
+    interval: 280
+    onTriggered: root.startSearch()
+  }
+
+  Process {
+    id: searchProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var current = String(addField.text || "").trim()
+        if (current === root.searchIssued)
+          root.searchResults = Model.parseSearch(String(text || ""), 8)
+        else if (current.length >= 2)
+          searchTimer.restart()
+      }
+    }
   }
 
   Process {
@@ -396,7 +474,7 @@ Panel {
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
-            text: "Build your watchlist\n\nAdd a Yahoo Finance symbol below, such as AAPL, ^GSPC, GBPUSD=X, or BTC-USD. Quotes refresh in the background and alerts keep working while Omarchy Shell is running."
+            text: "Build your watchlist\n\nSearch a company name or Yahoo Finance symbol below — such as “Apple”, AAPL, ^GSPC, GBPUSD=X, or BTC-USD — and pick a result. Quotes refresh in the background and alerts keep working while Omarchy Shell is running."
             color: Qt.darker(root.contentForeground, 1.5)
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.bodySmall
@@ -837,12 +915,20 @@ Panel {
               width: parent.width - addBtn.width - parent.spacing
               anchors.verticalCenter: parent.verticalCenter
               enabled: !root.validating
-              placeholderText: "Add symbol (e.g. AAPL, BTC-USD)"
+              placeholderText: "Search company or symbol"
               foreground: root.contentForeground
               font.family: root.contentFontFamily
-              onTextChanged: if (root.addError !== "") root.addError = ""
+              onTextChanged: root.queueSearch()
               Keys.onPressed: function (event) {
                 if (event.key === Qt.Key_Escape) { root.cancelAdd(); event.accepted = true }
+                else if (event.key === Qt.Key_Down && root.searchResults.length > 0) {
+                  root.searchIndex = Math.min(root.searchIndex + 1, root.searchResults.length - 1)
+                  event.accepted = true
+                }
+                else if (event.key === Qt.Key_Up && root.searchResults.length > 0) {
+                  root.searchIndex = Math.max(root.searchIndex - 1, 0)
+                  event.accepted = true
+                }
                 else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                   root.commitAdd(); event.accepted = true
                 }
@@ -858,6 +944,55 @@ Panel {
               fontFamily: root.contentFontFamily
               foreground: root.contentForeground
               onClicked: root.commitAdd()
+            }
+          }
+
+          Column {
+            visible: root.adding && root.searchResults.length > 0
+            width: parent.width
+            spacing: Style.space(2)
+
+            Repeater {
+              model: root.searchResults
+              Rectangle {
+                required property var modelData
+                required property int index
+                width: parent.width
+                height: Style.space(42)
+                radius: Style.cornerRadius
+                color: (index === root.searchIndex || resultMouse.containsMouse)
+                  ? Style.hoverFillFor(root.contentForeground, Color.accent) : "transparent"
+
+                MouseArea {
+                  id: resultMouse
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.addSearchResult(parent.modelData)
+                }
+
+                Row {
+                  anchors.fill: parent
+                  anchors.leftMargin: Style.space(10)
+                  anchors.rightMargin: Style.space(10)
+                  spacing: Style.space(10)
+                  Text {
+                    width: Style.space(76)
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: modelData.symbol
+                    color: root.contentForeground
+                    font.family: root.contentFontFamily
+                    font.pixelSize: Style.font.body
+                    font.bold: true
+                  }
+                  Column {
+                    width: parent.width - Style.space(86)
+                    anchors.verticalCenter: parent.verticalCenter
+                    Text { width: parent.width; text: modelData.name || modelData.symbol; elide: Text.ElideRight; color: root.contentForeground; font.family: root.contentFontFamily; font.pixelSize: Style.font.bodySmall }
+                    Text { width: parent.width; text: [modelData.exchange, modelData.type].filter(function(v) { return v }).join(" · "); elide: Text.ElideRight; color: Qt.darker(root.contentForeground, 1.6); font.family: root.contentFontFamily; font.pixelSize: Style.font.caption }
+                  }
+                }
+              }
             }
           }
 

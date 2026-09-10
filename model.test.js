@@ -37,6 +37,20 @@ ok("parseChartMeta bad symbol", m.parseChartMeta(JSON.stringify({
 })).ok === false)
 ok("parseChartMeta garbage", m.parseChartMeta("<html>").ok === false)
 
+// ---- parseSearch ----
+var search = m.parseSearch(JSON.stringify({ quotes: [
+  { symbol: "SPCE", longname: "Virgin Galactic Holdings, Inc.", exchDisp: "NYSE", quoteType: "EQUITY" },
+  { symbol: "UFO", shortname: "Procure Space ETF", exchange: "BTS", typeDisp: "ETF" },
+  { symbol: "SPCE", shortname: "duplicate" },
+  { longname: "missing symbol" }
+] }))
+ok("parseSearch returns quote matches", search.length === 2)
+ok("parseSearch keeps company name", search[0].name === "Virgin Galactic Holdings, Inc.")
+ok("parseSearch normalizes symbol", search[0].symbol === "SPCE")
+ok("parseSearch keeps instrument type", search[1].type === "ETF")
+ok("parseSearch rejects garbage", m.parseSearch("<html>").length === 0)
+ok("parseSearch respects limit", m.parseSearch(JSON.stringify({ quotes: [{symbol:"A"},{symbol:"B"}] }), 1).length === 1)
+
 // ---- state normalization ----
 var st = m.normalizeState({
   tickers: [
