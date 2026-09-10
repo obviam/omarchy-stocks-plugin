@@ -51,6 +51,36 @@ ok("parseSearch keeps instrument type", search[1].type === "ETF")
 ok("parseSearch rejects garbage", m.parseSearch("<html>").length === 0)
 ok("parseSearch respects limit", m.parseSearch(JSON.stringify({ quotes: [{symbol:"A"},{symbol:"B"}] }), 1).length === 1)
 
+// ---- parseChart + periodChange ----
+var chart = m.parseChart(JSON.stringify({
+  chart: { error: null, result: [ {
+    meta: { longName: "Apple Inc.", currency: "USD", exchangeName: "NMS", chartPreviousClose: 100 },
+    indicators: { quote: [ { close: [100, null, 110, 120] } ] }
+  } ] }
+}))
+ok("parseChart ok", chart.ok === true)
+ok("parseChart drops null closes", chart.closes.length === 3)
+ok("parseChart keeps name", chart.name === "Apple Inc.")
+ok("parseChart error response", m.parseChart(JSON.stringify({ chart: { error: { code: "Not Found" } } })).ok === false)
+ok("parseChart garbage", m.parseChart("<html>").ok === false)
+var pc = m.periodChange([100, 90, 125])
+ok("periodChange absolute", pc.change === 25)
+ok("periodChange percent", pc.changePct === 25)
+ok("periodChange too few points", m.periodChange([100]).changePct === null)
+
+// ---- chart range specs ----
+ok("chartRangeSpec known", m.chartRangeSpec("1mo").interval === "1d")
+ok("chartRangeSpec falls back to 1d", m.chartRangeSpec("bogus").value === "1d")
+ok("chartRangeLabel", m.chartRangeLabel("5y") === "5Y")
+ok("normalizeChartRange keeps valid", m.normalizeChartRange("3mo") === "3mo")
+ok("normalizeChartRange rejects invalid", m.normalizeChartRange("42y") === "1d")
+ok("default settings carry chartRange", m.defaultSettings().chartRange === "1d")
+ok("normalizeState defaults chartRange", m.normalizeState({}).settings.chartRange === "1d")
+ok("normalizeState keeps chosen chartRange", m.normalizeState({ settings: { chartRange: "1y" } }).settings.chartRange === "1y")
+ok("chart ranges include a distinct 1W", m.chartRangeSpec("1w").days === 7)
+ok("1W query spans seven calendar days", m.chartQuery("1w", 1000000) === "period1=395200&period2=1000000&interval=15m")
+ok("fixed chart query uses range", m.chartQuery("3mo", 1000000) === "range=3mo&interval=1d")
+
 // ---- state normalization ----
 var st = m.normalizeState({
   tickers: [

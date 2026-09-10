@@ -10,7 +10,8 @@ per-ticker price / percent-move alerts delivered as desktop notifications.
   tinted green/red by the day's move.
 - **Watchlist popup** — hero quote with a filled intraday sparkline, plus a
   row per ticker (price, mini sparkline, coloured daily-change badge). Click a row to
-  make it the hero.
+  make it the hero. Switch the hero graph between 1D, 5D, 1W, 1M, 3M, 6M,
+  1Y, 5Y, and maximum history.
 - **Search companies or symbols** as you type, then add a result from the dynamic
   suggestion list. Exact symbols are still validated against Yahoo Finance.
   Works for equities,
@@ -58,7 +59,8 @@ bind = SUPER, S, exec, omarchy-shell shell toggle impaler.stocks
 - Middle-click it to refresh quotes immediately.
 - Right-click it for a watchlist summary notification.
 - In the popup, use `[` / `]` or the arrow keys to change the selected ticker,
-  `a` or `+` to focus Add, and `r` to refresh.
+  `,` / `.` to change the hero graph range, `a` or `+` to focus Add, and `r`
+  to refresh.
 
 ## Configuration
 
@@ -69,6 +71,7 @@ and two settings available in the popup:
 |-----|---------|---------|
 | `settings.refreshSeconds` | `60` | quote poll interval (min 15) |
 | `settings.rotateSeconds` | `5` | pill rotation interval (min 2) |
+| `settings.chartRange` | `1d` | selected hero graph range |
 
 The file can still be edited by hand while troubleshooting. Invalid setting
 values are clamped to the ranges above when state is loaded.

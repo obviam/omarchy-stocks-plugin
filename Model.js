@@ -12,10 +12,57 @@ var REARM_MARGIN = 0.005 // 0.5%
 
 var ALERT_TYPES = ["above", "below", "pctMove"]
 
+// Selectable spans for the hero chart. `range`/`interval` are the query
+// parameters Yahoo's v8/finance/chart endpoint expects; `value` is what is
+// persisted in settings.chartRange and shown on the buttons. 1W uses epoch
+// bounds at request time so it remains distinct from Yahoo's five-day range.
+var CHART_RANGES = [
+  { value: "1d",  label: "1D",  range: "1d",  interval: "5m" },
+  { value: "5d",  label: "5D",  range: "5d",  interval: "15m" },
+  { value: "1w",  label: "1W",  days: 7,       interval: "15m" },
+  { value: "1mo", label: "1M",  range: "1mo", interval: "1d" },
+  { value: "3mo", label: "3M",  range: "3mo", interval: "1d" },
+  { value: "6mo", label: "6M",  range: "6mo", interval: "1d" },
+  { value: "1y",  label: "1Y",  range: "1y",  interval: "1wk" },
+  { value: "5y",  label: "5Y",  range: "5y",  interval: "1wk" },
+  { value: "max", label: "Max", range: "max", interval: "1mo" }
+]
+
+function chartRangeValues() {
+  return CHART_RANGES.map(function (r) { return r.value })
+}
+
+function chartRangeSpec(value) {
+  var v = String(value || "")
+  for (var i = 0; i < CHART_RANGES.length; i++)
+    if (CHART_RANGES[i].value === v) return CHART_RANGES[i]
+  return CHART_RANGES[0]
+}
+
+function chartRangeLabel(value) {
+  return chartRangeSpec(value).label
+}
+
+function normalizeChartRange(value) {
+  return chartRangeValues().indexOf(String(value)) !== -1 ? String(value) : "1d"
+}
+
+function chartQuery(value, nowSeconds) {
+  var spec = chartRangeSpec(value)
+  if (spec.days) {
+    var end = Math.floor(Number(nowSeconds))
+    if (!isFinite(end) || end <= 0) end = Math.floor(Date.now() / 1000)
+    return "period1=" + (end - spec.days * 86400) + "&period2=" + end
+      + "&interval=" + encodeURIComponent(spec.interval)
+  }
+  return "range=" + encodeURIComponent(spec.range)
+    + "&interval=" + encodeURIComponent(spec.interval)
+}
+
 // ---------------------------------------------------------------- state ----
 
 function defaultSettings() {
-  return { refreshSeconds: 60, rotateSeconds: 5 }
+  return { refreshSeconds: 60, rotateSeconds: 5, chartRange: "1d" }
 }
 
 function defaultState() {
@@ -36,7 +83,8 @@ function normalizeSettings(raw) {
   var s = raw && typeof raw === "object" ? raw : {}
   return {
     refreshSeconds: clampInt(s.refreshSeconds, 15, 3600, 60),
-    rotateSeconds: clampInt(s.rotateSeconds, 2, 60, 5)
+    rotateSeconds: clampInt(s.rotateSeconds, 2, 60, 5),
+    chartRange: normalizeChartRange(s.chartRange)
   }
 }
 
@@ -246,6 +294,50 @@ function parseChartMeta(text) {
   } catch (e) {
     return { ok: false, name: "" }
   }
+}
+
+// Pull the close series (plus the same metadata parseChartMeta returns) out
+// of a v8/finance/chart response, for the hero chart's selected time frame.
+function parseChart(text) {
+  try {
+    var data = JSON.parse(String(text || ""))
+    var chart = data && data.chart
+    if (!chart || chart.error) return { ok: false, closes: [], name: "" }
+    var result = chart.result && chart.result[0]
+    var meta = result && result.meta
+    if (!meta) return { ok: false, closes: [], name: "" }
+    var closes = []
+    var ind = result.indicators
+    if (ind && Array.isArray(ind.quote) && ind.quote[0])
+      closes = cleanNumbers(ind.quote[0].close)
+    if (!closes.length && ind && Array.isArray(ind.adjclose) && ind.adjclose[0])
+      closes = cleanNumbers(ind.adjclose[0].adjclose)
+    var prev = Number(meta.chartPreviousClose)
+    if (!isFinite(prev)) prev = Number(meta.previousClose)
+    return {
+      ok: true,
+      closes: closes,
+      name: String(meta.longName || meta.shortName || ""),
+      currency: String(meta.currency || ""),
+      exchange: String(meta.exchangeName || meta.fullExchangeName || ""),
+      prevClose: isFinite(prev) ? prev : null
+    }
+  } catch (e) {
+    return { ok: false, closes: [], name: "" }
+  }
+}
+
+// Absolute and percentage move across a close series (first point to last).
+// Used for the hero chart's summary on multi-day ranges, where "since
+// previous close" no longer describes what the line shows.
+function periodChange(closes) {
+  var v = cleanNumbers(closes)
+  if (v.length < 2) return { change: null, changePct: null }
+  var first = v[0]
+  var last = v[v.length - 1]
+  if (!isFinite(first) || first === 0) return { change: null, changePct: null }
+  var change = last - first
+  return { change: change, changePct: (change / first) * 100 }
 }
 
 // Turn Yahoo's search response into a compact, deduplicated list of tradable
@@ -491,7 +583,15 @@ if (typeof module !== "undefined") {
     defaultAlertValue: defaultAlertValue,
     parseSpark: parseSpark,
     parseChartMeta: parseChartMeta,
+    parseChart: parseChart,
     parseSearch: parseSearch,
+    periodChange: periodChange,
+    CHART_RANGES: CHART_RANGES,
+    chartRangeValues: chartRangeValues,
+    chartRangeSpec: chartRangeSpec,
+    chartRangeLabel: chartRangeLabel,
+    normalizeChartRange: normalizeChartRange,
+    chartQuery: chartQuery,
     buildQuote: buildQuote,
     formatPrice: formatPrice,
     formatSignedPct: formatSignedPct,

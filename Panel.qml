@@ -32,6 +32,24 @@ Panel {
   property var lastRemovedTicker: null
   property int lastRemovedIndex: -1
 
+  // Hero-chart time frame. "1d" reuses the live spark from the quote feed;
+  // every longer range is a one-shot fetch against v8/finance/chart, cached
+  // by "SYMBOL|range" so flipping back and forth doesn't refetch.
+  readonly property string chartRange: root.state.settings.chartRange || "1d"
+  property var chartSeries: []
+  property bool chartLoading: false
+  property string chartLoadedKey: ""
+  property bool chartFailed: false
+
+  readonly property string chartRequest:
+    (root.selectedTicker ? root.selectedTicker.symbol : "") + "|" + root.chartRange
+  onChartRequestChanged: {
+    if (root.chartRange !== "1d" && root.chartRequest !== root.chartLoadedKey)
+      root.chartSeries = []
+    root.chartFailed = false
+    Qt.callLater(root.loadChart)
+  }
+
   // The host BarWidget injects `service`, but fall back to resolving it
   // ourselves from bar.shell in case that injection is missed or late.
   function resolveOwnService() {
@@ -88,6 +106,7 @@ Panel {
     root.controller.show()
     if (service && service.reloadState) service.reloadState()
     if (service && service.refresh) service.refresh()
+    Qt.callLater(root.loadChart)
   }
 
   function openFromHotkey() {
@@ -95,6 +114,7 @@ Panel {
     root.controller.show()
     if (service && service.reloadState) service.reloadState()
     if (service && service.refresh) service.refresh()
+    Qt.callLater(root.loadChart)
     Qt.callLater(function () {
       if (root.opened) setCenterHoverRevealSuppressed(true)
     })
@@ -333,6 +353,87 @@ Panel {
     }
   }
 
+  // -------------------------------------------------------- hero chart ----
+
+  // Series the hero sparkline plots: the live intraday spark for "1d", the
+  // fetched close series for any longer range.
+  readonly property var heroSeries: root.chartRange === "1d"
+    ? (root.selectedQuote ? root.selectedQuote.spark : [])
+    : root.chartSeries
+
+  // Move shown beside the hero price. "1d" stays anchored to the previous
+  // close (matching the watchlist rows and bar pill); longer ranges report
+  // the move across the visible window.
+  readonly property var heroMove: {
+    if (root.chartRange === "1d") {
+      var q = root.selectedQuote
+      return {
+        change: q ? q.change : null,
+        changePct: q ? q.changePct : null,
+        caption: "since previous close"
+      }
+    }
+    var pc = Model.periodChange(root.heroSeries)
+    return {
+      change: pc.change,
+      changePct: pc.changePct,
+      caption: "past " + Model.chartRangeLabel(root.chartRange)
+    }
+  }
+
+  function setChartRange(value) {
+    if (Model.chartRangeValues().indexOf(String(value)) === -1) return
+    root.updateSetting("chartRange", String(value))
+  }
+
+  function stepChartRange(delta) {
+    var vals = Model.chartRangeValues()
+    var i = vals.indexOf(root.chartRange)
+    if (i === -1) i = 0
+    root.setChartRange(vals[Math.max(0, Math.min(vals.length - 1, i + delta))])
+  }
+
+  function loadChart() {
+    if (root.chartRange === "1d") { root.chartLoading = false; return }
+    var ticker = root.selectedTicker
+    if (!ticker) return
+    var key = root.chartRequest
+    if (key === root.chartLoadedKey && root.chartSeries.length > 1) return
+    if (chartProc.running) return
+    var spec = Model.chartRangeSpec(root.chartRange)
+    root.chartLoading = true
+    root.chartFailed = false
+    root._chartPending = key
+    chartProc.command = ["curl", "-fsS", "-A", "Mozilla/5.0", "--max-time", "10",
+      "https://query1.finance.yahoo.com/v8/finance/chart/"
+        + encodeURIComponent(ticker.symbol)
+        + "?" + Model.chartQuery(spec.value, Date.now() / 1000)]
+    chartProc.running = true
+  }
+
+  property string _chartPending: ""
+
+  Process {
+    id: chartProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        root.chartLoading = false
+        var parsed = Model.parseChart(String(text || ""))
+        // Ignore a response whose request the selection has already moved past.
+        if (root._chartPending !== root.chartRequest) { Qt.callLater(root.loadChart); return }
+        if (!parsed.ok || parsed.closes.length < 2) {
+          root.chartFailed = true
+          root.chartSeries = []
+          return
+        }
+        root.chartSeries = parsed.closes
+        root.chartLoadedKey = root._chartPending
+        root.chartFailed = false
+      }
+    }
+  }
+
   // ----------------------------------------------------- alert mutations ----
 
   function addAlert(sym) {
@@ -425,6 +526,8 @@ Panel {
       onTextKey: function (t) {
         if (t === "[") root.stepSelection(-1)
         else if (t === "]") root.stepSelection(1)
+        else if (t === "," || t === "<") root.stepChartRange(-1)
+        else if (t === "." || t === ">") root.stepChartRange(1)
         else if (t === "a" || t === "+") root.startAdd()
         else if (t === "r") { if (root.service && root.service.refresh) root.service.refresh() }
       }
@@ -523,17 +626,19 @@ Panel {
                 spacing: Style.space(1)
 
                 Text {
-                  text: root.selectedQuote
-                    ? Model.arrow(root.selectedQuote.changePct) + " " + Model.formatSignedChange(root.selectedQuote.change)
+                  text: root.heroMove.changePct !== null
+                    ? Model.arrow(root.heroMove.changePct) + " " + Model.formatSignedChange(root.heroMove.change)
                     : ""
-                  color: root.dirColor(root.selectedQuote ? root.selectedQuote.changePct : null)
+                  color: root.dirColor(root.heroMove.changePct)
                   font.family: root.contentFontFamily
                   font.pixelSize: Style.font.body
                   font.bold: true
                 }
                 Text {
-                  text: root.selectedQuote ? Model.formatSignedPct(root.selectedQuote.changePct) + "  ·  since previous close" : ""
-                  color: root.dirColor(root.selectedQuote ? root.selectedQuote.changePct : null)
+                  text: root.heroMove.changePct !== null
+                    ? Model.formatSignedPct(root.heroMove.changePct) + "  ·  " + root.heroMove.caption
+                    : (root.chartLoading ? "Loading " + Model.chartRangeLabel(root.chartRange) + "…" : "")
+                  color: root.dirColor(root.heroMove.changePct)
                   font.family: root.contentFontFamily
                   font.pixelSize: Style.font.bodySmall
                 }
@@ -543,11 +648,44 @@ Panel {
             Sparkline {
               width: parent.width
               height: Style.space(64)
-              values: root.selectedQuote ? root.selectedQuote.spark : []
+              values: root.heroSeries
               filled: true
               lineThickness: 1.8
-              lineColor: root.dirColor(root.selectedQuote ? root.selectedQuote.changePct : null)
+              lineColor: root.dirColor(root.heroMove.changePct)
               fillColor: lineColor
+            }
+
+            // ---- time-frame selector ----
+            Flow {
+              width: parent.width
+              spacing: Style.space(4)
+              topPadding: Style.space(2)
+
+              Repeater {
+                model: Model.CHART_RANGES
+
+                Button {
+                  required property var modelData
+                  text: modelData.label
+                  bordered: true
+                  selected: modelData.value === root.chartRange
+                  fontFamily: root.contentFontFamily
+                  fontSize: Style.font.caption
+                  foreground: root.contentForeground
+                  horizontalPadding: Style.space(7)
+                  verticalPadding: Style.space(4)
+                  onClicked: root.setChartRange(modelData.value)
+                }
+              }
+            }
+
+            Text {
+              visible: root.chartFailed
+              width: parent.width
+              text: "Couldn’t load the " + Model.chartRangeLabel(root.chartRange) + " chart — showing what’s cached"
+              color: root.bar ? root.bar.urgent : Color.urgent
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.caption
             }
 
             Text {
@@ -1007,7 +1145,7 @@ Panel {
           Text {
             visible: root.tickers.length > 0
             width: parent.width
-            text: "[ ] to switch ticker · a to add · r to refresh"
+            text: "[ ] switch ticker · , . chart range · a add · r refresh"
             color: Qt.darker(root.contentForeground, 1.9)
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.caption
