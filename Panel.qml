@@ -26,6 +26,7 @@ Panel {
   property bool validating: false
   property string addError: ""
   property string addPending: ""
+  property bool settingsOpen: false
   property var searchResults: []
   property string searchIssued: ""
   property int searchIndex: -1
@@ -529,6 +530,7 @@ Panel {
         else if (t === "," || t === "<") root.stepChartRange(-1)
         else if (t === "." || t === ">") root.stepChartRange(1)
         else if (t === "a" || t === "+") root.startAdd()
+        else if (t === "s") root.settingsOpen = !root.settingsOpen
         else if (t === "r") { if (root.service && root.service.refresh) root.service.refresh() }
       }
 
@@ -1000,7 +1002,17 @@ Panel {
 
           PanelSeparator {}
 
+          Button {
+            text: "⚙ Settings"
+            bordered: true
+            selected: root.settingsOpen
+            fontFamily: root.contentFontFamily
+            foreground: root.contentForeground
+            onClicked: root.settingsOpen = !root.settingsOpen
+          }
+
           Column {
+            visible: root.settingsOpen
             width: parent.width
             spacing: Style.space(8)
 
@@ -1145,7 +1157,7 @@ Panel {
           Text {
             visible: root.tickers.length > 0
             width: parent.width
-            text: "[ ] switch ticker · , . chart range · a add · r refresh"
+            text: "[ ] switch ticker · , . chart range · a add · s settings · r refresh"
             color: Qt.darker(root.contentForeground, 1.9)
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.caption
