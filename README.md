@@ -47,6 +47,19 @@ it with `omarchy bar move impaler.stocks --section right`.
 Update later with `omarchy plugin update impaler.stocks` (fast-forward pull, shows
 a diff first).
 
+### Remove
+
+```bash
+omarchy plugin disable impaler.stocks
+omarchy plugin remove impaler.stocks
+```
+
+`disable` takes the pill off the bar and stops the headless service; `remove`
+deletes `~/.config/omarchy/plugins/impaler.stocks/`. Your watchlist, alerts, and
+settings live in `~/.local/state/omarchy/stocks.json` (see
+[Configuration](#configuration)) and are left in place — delete that file too for
+a clean removal.
+
 ### Hotkey (optional)
 
 ```
