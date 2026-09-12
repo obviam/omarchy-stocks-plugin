@@ -47,9 +47,10 @@ Item {
   function startFetch() {
     root.fetching = true
     root.fetchError = ""
-    fetchProc.command = ["curl", "-fsS", "-A", "Mozilla/5.0", "--max-time", "10",
+    fetchProc.command = Model.curlCommand(
       "https://query1.finance.yahoo.com/v8/finance/spark?symbols="
-        + encodeURIComponent(root.symbolsParam) + "&range=1d&interval=5m"]
+        + encodeURIComponent(root.symbolsParam) + "&range=1d&interval=5m",
+      10, Model.MAX_QUOTE_BYTES)
     fetchProc.running = true
   }
 

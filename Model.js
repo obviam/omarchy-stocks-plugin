@@ -194,9 +194,69 @@ function defaultAlertValue(type, quote) {
   return Number(value.toFixed(digits))
 }
 
+// ---------------------------------------------------- bounded remote fetch ----
+
+// Yahoo Finance is unauthenticated and unofficial: every response — success,
+// error, or redirect body alike — is untrusted input from a server the
+// plugin does not control. `curl`'s own size guard (`--max-filesize`) aborts
+// the transfer once it has streamed past the limit even without a
+// Content-Length header, but a compromised or merely malformed endpoint
+// could still race bytes onto the wait-for-end StdioCollector before the
+// connection is cut, so the pipe to `head -c` enforces the same cap a
+// second, unconditional way, directly on the byte stream, before QML ever
+// sees it. Both limits use the same value, so a real, fully-delivered
+// response that happens to land exactly at the cap is filtered out along
+// with a truncated one — an acceptable trade given the caps below are many
+// times larger than any real payload from these endpoints.
+var USER_AGENT = "Mozilla/5.0"
+var CONNECT_TIMEOUT = 5    // seconds to establish the TCP/TLS connection
+var LOW_SPEED_LIMIT = 500  // bytes/sec below which a stalled transfer aborts
+var LOW_SPEED_TIME = 8     // seconds the transfer may stay below that rate
+
+var MAX_QUOTE_BYTES = 256 * 1024   // batched spark quotes for the watchlist
+var MAX_CHART_BYTES = 512 * 1024   // one symbol's chart/meta, any range
+var MAX_SEARCH_BYTES = 64 * 1024   // typeahead search results
+var MAX_SERIES_POINTS = 5000       // retained price points per series
+var MAX_QUOTE_SYMBOLS = 200        // retained quotes per spark response
+var MAX_FIELD_CHARS = 128          // retained length of any metadata string
+
+// Builds a `curl | head -c` pipeline as a Process command array for
+// Quickshell's Process/StdioCollector. The URL and every limit travel as
+// positional shell parameters, never interpolated into the script text, so
+// nothing in a symbol, search query, or URL can affect how the shell parses
+// the command. `-L` (follow redirects) is deliberately omitted, same as
+// before this fix.
+function curlCommand(url, maxTimeSeconds, maxBytes) {
+  return ["sh", "-c",
+    'curl -fsS -A "$1" --connect-timeout "$2" --max-time "$3" ' +
+    '--speed-limit "$4" --speed-time "$5" --max-filesize "$6" "$7" | head -c "$6"',
+    "curl-fetch",
+    USER_AGENT,
+    String(CONNECT_TIMEOUT),
+    String(maxTimeSeconds),
+    String(LOW_SPEED_LIMIT),
+    String(LOW_SPEED_TIME),
+    String(maxBytes),
+    url
+  ]
+}
+
+// Rejects a response that filled the `head -c maxBytes` cap — truncated, or
+// landing exactly on the boundary — before the text ever reaches
+// JSON.parse. A response that came in under the cap is returned unchanged.
+function readBounded(text, maxBytes) {
+  var s = String(text || "")
+  return s.length >= maxBytes ? null : s
+}
+
+function capString(value, maxLen) {
+  var s = String(value || "")
+  return s.length > maxLen ? s.slice(0, maxLen) : s
+}
+
 // ------------------------------------------------- Yahoo Finance parsing ----
 
-function cleanNumbers(arr) {
+function cleanNumbers(arr, maxLen) {
   var out = []
   if (!Array.isArray(arr)) return out
   for (var i = 0; i < arr.length; i++) {
@@ -204,6 +264,9 @@ function cleanNumbers(arr) {
     var n = Number(arr[i])
     if (isFinite(n)) out.push(n)
   }
+  // Keep the most recent points — the ones every caller actually renders or
+  // reads the latest price from — rather than the oldest.
+  if (maxLen && out.length > maxLen) out = out.slice(-maxLen)
   return out
 }
 
@@ -221,14 +284,14 @@ function buildQuote(price, prev, spark, metadata) {
     change: change,
     changePct: changePct,
     spark: spark || [],
-    currency: String(meta.currency || ""),
-    exchange: String(meta.exchange || meta.exchangeName || ""),
-    marketState: String(meta.marketState || "")
+    currency: capString(meta.currency, MAX_FIELD_CHARS),
+    exchange: capString(meta.exchange || meta.exchangeName, MAX_FIELD_CHARS),
+    marketState: capString(meta.marketState, MAX_FIELD_CHARS)
   }
 }
 
 function quoteFromFlatSpark(entry) {
-  var closes = cleanNumbers(entry.close)
+  var closes = cleanNumbers(entry.close, MAX_SERIES_POINTS)
   var prev = Number(entry.chartPreviousClose)
   if (!isFinite(prev)) prev = Number(entry.previousClose)
   var price = closes.length ? closes[closes.length - 1] : (isFinite(prev) ? prev : null)
@@ -239,7 +302,7 @@ function quoteFromNestedSpark(response) {
   var closes = []
   var ind = response && response.indicators
   if (ind && Array.isArray(ind.quote) && ind.quote[0])
-    closes = cleanNumbers(ind.quote[0].close)
+    closes = cleanNumbers(ind.quote[0].close, MAX_SERIES_POINTS)
   var meta = response && response.meta
   var prev = meta ? Number(meta.chartPreviousClose) : NaN
   if (!isFinite(prev) && meta) prev = Number(meta.previousClose)
@@ -251,14 +314,19 @@ function quoteFromNestedSpark(response) {
 
 // Accepts both spark response shapes: the flat `{ "AAPL": { close, ... } }`
 // map and the nested `{ spark: { result: [ { symbol, response: [...] } ] } }`.
+// `text` is untrusted (see the bounded-fetch section above): a truncated
+// response is rejected before JSON.parse, and the number of quotes kept is
+// capped regardless of how many keys or result rows the payload claims.
 function parseSpark(text) {
   var out = {}
+  var body = readBounded(text, MAX_QUOTE_BYTES)
+  if (body === null) return out
   var data
-  try { data = JSON.parse(String(text || "")) } catch (e) { return out }
+  try { data = JSON.parse(body) } catch (e) { return out }
   if (!data || typeof data !== "object") return out
 
   if (data.spark && Array.isArray(data.spark.result)) {
-    for (var i = 0; i < data.spark.result.length; i++) {
+    for (var i = 0; i < data.spark.result.length && Object.keys(out).length < MAX_QUOTE_SYMBOLS; i++) {
       var row = data.spark.result[i]
       var sym = row && row.symbol
       var response = row && Array.isArray(row.response) ? row.response[0] : null
@@ -269,6 +337,7 @@ function parseSpark(text) {
   }
 
   for (var key in data) {
+    if (Object.keys(out).length >= MAX_QUOTE_SYMBOLS) break
     var entry = data[key]
     if (!entry || typeof entry !== "object" || !("close" in entry)) continue
     out[String(key).toUpperCase()] = quoteFromFlatSpark(entry)
@@ -277,9 +346,12 @@ function parseSpark(text) {
 }
 
 // Pull a display name (and validity) out of a v8/finance/chart response.
+// `text` is untrusted: see the bounded-fetch section above.
 function parseChartMeta(text) {
+  var body = readBounded(text, MAX_CHART_BYTES)
+  if (body === null) return { ok: false, name: "" }
   try {
-    var data = JSON.parse(String(text || ""))
+    var data = JSON.parse(body)
     var chart = data && data.chart
     if (!chart || chart.error) return { ok: false, name: "" }
     var result = chart.result && chart.result[0]
@@ -287,9 +359,9 @@ function parseChartMeta(text) {
     if (!meta) return { ok: false, name: "" }
     return {
       ok: true,
-      name: String(meta.longName || meta.shortName || ""),
-      currency: String(meta.currency || ""),
-      exchange: String(meta.exchangeName || meta.fullExchangeName || "")
+      name: capString(meta.longName || meta.shortName, MAX_FIELD_CHARS),
+      currency: capString(meta.currency, MAX_FIELD_CHARS),
+      exchange: capString(meta.exchangeName || meta.fullExchangeName, MAX_FIELD_CHARS)
     }
   } catch (e) {
     return { ok: false, name: "" }
@@ -298,9 +370,12 @@ function parseChartMeta(text) {
 
 // Pull the close series (plus the same metadata parseChartMeta returns) out
 // of a v8/finance/chart response, for the hero chart's selected time frame.
+// `text` is untrusted: see the bounded-fetch section above.
 function parseChart(text) {
+  var body = readBounded(text, MAX_CHART_BYTES)
+  if (body === null) return { ok: false, closes: [], name: "" }
   try {
-    var data = JSON.parse(String(text || ""))
+    var data = JSON.parse(body)
     var chart = data && data.chart
     if (!chart || chart.error) return { ok: false, closes: [], name: "" }
     var result = chart.result && chart.result[0]
@@ -309,17 +384,17 @@ function parseChart(text) {
     var closes = []
     var ind = result.indicators
     if (ind && Array.isArray(ind.quote) && ind.quote[0])
-      closes = cleanNumbers(ind.quote[0].close)
+      closes = cleanNumbers(ind.quote[0].close, MAX_SERIES_POINTS)
     if (!closes.length && ind && Array.isArray(ind.adjclose) && ind.adjclose[0])
-      closes = cleanNumbers(ind.adjclose[0].adjclose)
+      closes = cleanNumbers(ind.adjclose[0].adjclose, MAX_SERIES_POINTS)
     var prev = Number(meta.chartPreviousClose)
     if (!isFinite(prev)) prev = Number(meta.previousClose)
     return {
       ok: true,
       closes: closes,
-      name: String(meta.longName || meta.shortName || ""),
-      currency: String(meta.currency || ""),
-      exchange: String(meta.exchangeName || meta.fullExchangeName || ""),
+      name: capString(meta.longName || meta.shortName, MAX_FIELD_CHARS),
+      currency: capString(meta.currency, MAX_FIELD_CHARS),
+      exchange: capString(meta.exchangeName || meta.fullExchangeName, MAX_FIELD_CHARS),
       prevClose: isFinite(prev) ? prev : null
     }
   } catch (e) {
@@ -342,24 +417,27 @@ function periodChange(closes) {
 
 // Turn Yahoo's search response into a compact, deduplicated list of tradable
 // instruments. News and other non-quote results are intentionally ignored.
+// `text` is untrusted: see the bounded-fetch section above.
 function parseSearch(text, limit) {
   var out = []
   var seen = {}
   var max = Number(limit)
   if (!isFinite(max) || max < 1) max = 8
+  var body = readBounded(text, MAX_SEARCH_BYTES)
+  if (body === null) return out
   try {
-    var data = JSON.parse(String(text || ""))
+    var data = JSON.parse(body)
     var quotes = data && Array.isArray(data.quotes) ? data.quotes : []
     for (var i = 0; i < quotes.length && out.length < max; i++) {
       var row = quotes[i] || {}
-      var symbol = String(row.symbol || "").trim().toUpperCase()
+      var symbol = capString(row.symbol, MAX_FIELD_CHARS).trim().toUpperCase()
       if (!symbol || seen[symbol]) continue
       seen[symbol] = true
       out.push({
         symbol: symbol,
-        name: String(row.longname || row.shortname || row.name || ""),
-        exchange: String(row.exchDisp || row.exchange || ""),
-        type: String(row.typeDisp || row.quoteType || "")
+        name: capString(row.longname || row.shortname || row.name, MAX_FIELD_CHARS),
+        exchange: capString(row.exchDisp || row.exchange, MAX_FIELD_CHARS),
+        type: capString(row.typeDisp || row.quoteType, MAX_FIELD_CHARS)
       })
     }
   } catch (e) {}
@@ -581,6 +659,15 @@ if (typeof module !== "undefined") {
     symbolList: symbolList,
     findTicker: findTicker,
     defaultAlertValue: defaultAlertValue,
+    curlCommand: curlCommand,
+    readBounded: readBounded,
+    capString: capString,
+    MAX_QUOTE_BYTES: MAX_QUOTE_BYTES,
+    MAX_CHART_BYTES: MAX_CHART_BYTES,
+    MAX_SEARCH_BYTES: MAX_SEARCH_BYTES,
+    MAX_SERIES_POINTS: MAX_SERIES_POINTS,
+    MAX_QUOTE_SYMBOLS: MAX_QUOTE_SYMBOLS,
+    MAX_FIELD_CHARS: MAX_FIELD_CHARS,
     parseSpark: parseSpark,
     parseChartMeta: parseChartMeta,
     parseChart: parseChart,

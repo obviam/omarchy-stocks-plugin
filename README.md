@@ -33,6 +33,13 @@ batched request for the whole watchlist. It's an unofficial endpoint; if it
 changes, only the URL and `parseSpark()` in `Model.js` need updating. Fetch
 failures are non-fatal (last-good data stays on screen, with retry/backoff).
 
+Every request goes through `curl | head -c` (see `Model.curlCommand()` in
+`Model.js`), which bounds connect time, total time, sustained throughput, and
+response size — independent of what the endpoint claims or streams back — so
+a compromised or malformed response can't pin the shared `omarchy-shell`
+process. Requires `curl`, `sh`, and `head` on `PATH`, all standard on any
+Linux install.
+
 ## Install
 
 ```bash

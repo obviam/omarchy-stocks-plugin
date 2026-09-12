@@ -164,5 +164,49 @@ ok("sparklinePoints x spans width", pts[0].x === 0 && pts[3].x === 100)
 ok("sparklinePoints y inverted (min at bottom)", pts[0].y === 10 && pts[3].y === 0)
 ok("sparklinePoints too few", m.sparklinePoints([1], 100, 10, 0).length === 0)
 
+// ---- bounded remote fetch ----
+ok("readBounded passes text under the cap", m.readBounded("abc", 10) === "abc")
+ok("readBounded rejects text at the cap", m.readBounded("abcdefghij", 10) === null)
+ok("readBounded rejects text over the cap", m.readBounded("abcdefghijk", 10) === null)
+ok("readBounded treats missing text as empty, under any positive cap", m.readBounded(undefined, 10) === "")
+
+var cmd = m.curlCommand("https://example.com/x?a=1", 7, 2048)
+ok("curlCommand runs through sh -c", cmd[0] === "sh" && cmd[1] === "-c")
+ok("curlCommand pipes curl into head -c", /curl .* \| head -c/.test(cmd[2]))
+ok("curlCommand never inlines the URL into the script", cmd[2].indexOf("example.com") === -1)
+ok("curlCommand passes the URL as a positional arg instead", cmd.indexOf("https://example.com/x?a=1") !== -1)
+ok("curlCommand carries the requested max-time", cmd.indexOf("7") !== -1)
+ok("curlCommand carries the requested byte cap", cmd.indexOf("2048") !== -1)
+
+ok("capString passes short values through", m.capString("AAPL", 10) === "AAPL")
+ok("capString truncates long values", m.capString("x".repeat(500), 10).length === 10)
+ok("capString treats missing values as empty", m.capString(undefined, 10) === "")
+
+// A spark response with a wildly oversized close series and metadata
+// strings still comes back capped, not just truncated by luck.
+var hugeCloses = []
+for (var hc = 0; hc < m.MAX_SERIES_POINTS + 500; hc++) hugeCloses.push(hc)
+var hugeSpark = JSON.stringify({
+  AAPL: { close: hugeCloses, previousClose: 0, currency: "x".repeat(1000) }
+})
+var hugeQuote = m.parseSpark(hugeSpark).AAPL
+ok("parseSpark caps retained series length", hugeQuote.spark.length === m.MAX_SERIES_POINTS)
+ok("parseSpark keeps the most recent points", hugeQuote.spark[hugeQuote.spark.length - 1] === hugeCloses[hugeCloses.length - 1])
+ok("parseSpark caps retained field length", hugeQuote.currency.length === m.MAX_FIELD_CHARS)
+
+// A spark response with far more symbols than any real watchlist is capped
+// by record count, not just left to grow unbounded.
+var manySymbols = {}
+for (var ms = 0; ms < m.MAX_QUOTE_SYMBOLS + 50; ms++)
+  manySymbols["SYM" + ms] = { close: [1], previousClose: 1 }
+ok("parseSpark caps retained symbol count", Object.keys(m.parseSpark(JSON.stringify(manySymbols))).length === m.MAX_QUOTE_SYMBOLS)
+
+// A response `head -c` had to truncate is rejected before JSON.parse, not
+// handed to it and caught.
+var oversizedText = "x".repeat(m.MAX_SEARCH_BYTES + 1)
+ok("parseSearch rejects an over-cap response outright", m.parseSearch(oversizedText).length === 0)
+ok("parseChart rejects an over-cap response outright", m.parseChart("x".repeat(m.MAX_CHART_BYTES + 1)).ok === false)
+ok("parseChartMeta rejects an over-cap response outright", m.parseChartMeta("x".repeat(m.MAX_CHART_BYTES + 1)).ok === false)
+
 console.log("\n" + pass + " passed, " + fail + " failed")
 process.exit(fail ? 1 : 0)

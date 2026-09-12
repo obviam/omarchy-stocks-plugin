@@ -245,9 +245,10 @@ Panel {
     root.addPending = raw
     root.addError = ""
     root.validating = true
-    validateProc.command = ["curl", "-fsS", "-A", "Mozilla/5.0", "--max-time", "8",
+    validateProc.command = Model.curlCommand(
       "https://query1.finance.yahoo.com/v8/finance/chart/"
-        + encodeURIComponent(raw) + "?range=1d&interval=1d"]
+        + encodeURIComponent(raw) + "?range=1d&interval=1d",
+      8, Model.MAX_CHART_BYTES)
     validateProc.running = true
   }
 
@@ -293,9 +294,10 @@ Panel {
     if (query.length < 2) return
     if (searchProc.running) return
     root.searchIssued = query
-    searchProc.command = ["curl", "-fsS", "-A", "Mozilla/5.0", "--max-time", "8",
+    searchProc.command = Model.curlCommand(
       "https://query2.finance.yahoo.com/v1/finance/search?q="
-        + encodeURIComponent(query) + "&quotesCount=8&newsCount=0"]
+        + encodeURIComponent(query) + "&quotesCount=8&newsCount=0",
+      8, Model.MAX_SEARCH_BYTES)
     searchProc.running = true
   }
 
@@ -405,10 +407,11 @@ Panel {
     root.chartLoading = true
     root.chartFailed = false
     root._chartPending = key
-    chartProc.command = ["curl", "-fsS", "-A", "Mozilla/5.0", "--max-time", "10",
+    chartProc.command = Model.curlCommand(
       "https://query1.finance.yahoo.com/v8/finance/chart/"
         + encodeURIComponent(ticker.symbol)
-        + "?" + Model.chartQuery(spec.value, Date.now() / 1000)]
+        + "?" + Model.chartQuery(spec.value, Date.now() / 1000),
+      10, Model.MAX_CHART_BYTES)
     chartProc.running = true
   }
 
